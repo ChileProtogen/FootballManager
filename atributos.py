@@ -26,6 +26,26 @@ TODOS_LOS_ATRIBUTOS = [
     "Determinación", "Velocidad", "Resistencia", "Fuerza"
 ]
 
+# Añade esto a atributos.py
+class Entrenador:
+    def __init__(self, nombre, estilo, nivel, salario):
+        self.nombre = nombre
+        self.estilo = estilo  # "Ofensivo" (+goles, +riesgo), "Defensivo" (-goles encajados), "Equilibrado"
+        self.nivel = nivel    # De 1.0 a 1.5 (Multiplicador de CA)
+        self.salario = salario
+
+def generar_candidatos_dt(cantidad=3):
+    nombres_dt = ["Ancelotti", "Guardiola", "Mourinho", "Klopp", "Simeone", "Zidane"]
+    estilos = ["Ofensivo", "Defensivo", "Equilibrado"]
+    candidatos = []
+    for _ in range(cantidad):
+        nombre = f"Sr. {random.choice(nombres_dt)} {generar_nombre_aleatorio().split()[-1]}"
+        estilo = random.choice(estilos)
+        nivel = round(random.uniform(1.0, 1.4), 2)
+        salario = int(nivel * 200) # El salario depende de su nivel
+        candidatos.append(Entrenador(nombre, estilo, nivel, salario))
+    return candidatos
+
 def generar_nombre_aleatorio():
     """Genera una combinación aleatoria de nombre y apellido"""
     return f"{random.choice(NOMBRES)} {random.choice(APELLIDOS)}"
