@@ -34,18 +34,6 @@ class Liga:
             self.tabla[local.nombre]["Pts"] += 1
             self.tabla[visitante.nombre]["Pts"] += 1
 
-        # Añade esto a tu clase Liga en liga.py
-    def generar_mercado(self):
-        self.mercado_libres = []
-        posiciones = ["Delantero", "Defensa", "Mediocentro"]
-        for _ in range(10): # 10 jugadores nuevos cada semana
-            nombre = generar_nombre_aleatorio()
-            pos = random.choice(posiciones)
-            edad = random.randint(18, 32)
-            stats = generar_stats_jugador(pos)
-            # Creamos el jugador (usando JugadorCompleto)
-            nuevo = JugadorCompleto(nombre, pos, edad, stats)
-            self.mercado_libres.append(nuevo)
 
     def generar_fixture(self):
         """Genera un calendario de todos contra todos (Round Robin)"""

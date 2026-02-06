@@ -89,3 +89,4 @@ def crear_jugadores_libres(cantidad=10):
         libres.append(nuevo_jugador)
         
     return libres   
+

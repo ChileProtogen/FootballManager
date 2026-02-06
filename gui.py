@@ -11,7 +11,7 @@ class EquipoReal:
     def __init__(self, nombre):
         self.nombre = nombre
         self.plantilla = []
-        self.presupuesto = 1000  # Monedas iniciales para fichajes
+        self.presupuesto = 1000  # Monedas iniciales
         self.goles = 0
         self.nivel_medio = 0
 
@@ -27,7 +27,6 @@ class EquipoReal:
         self.actualizar_nivel_equipo()
 
     def actualizar_nivel_equipo(self):
-        # El nivel medio solo considera a los jugadores disponibles
         disponibles = [j.ca for j in self.plantilla if not j.lesionado and not j.sancionado]
         if disponibles:
             self.nivel_medio = (sum(disponibles) / len(disponibles)) / 2
@@ -53,7 +52,6 @@ class FMGui:
         
         self.liga = Liga("La Liga", equipos)
         self.liga.generar_fixture()
-        # Generar pool inicial de transferibles en la liga
         self.liga.mercado_libres = crear_jugadores_libres(10)
 
     def setup_styles(self):
@@ -66,7 +64,6 @@ class FMGui:
         style.map("Treeview", background=[('selected', '#3498db')])
 
     def setup_ui(self):
-        # Sidebar
         sidebar = tk.Frame(self.root, width=220, bg="#1a252f")
         sidebar.pack(side="left", fill="y")
 
@@ -77,11 +74,9 @@ class FMGui:
         self.crear_boton(sidebar, "Ver Clasificación", self.actualizar_tabla)
         self.crear_boton(sidebar, "Guardar Partida", self.liga.guardar_partida)
 
-        # Main Area
         main = tk.Frame(self.root, bg="#121212")
         main.pack(side="right", expand=True, fill="both", padx=25, pady=20)
 
-        # Header Info (Jornada y Presupuesto)
         header_frame = tk.Frame(main, bg="#121212")
         header_frame.pack(fill="x")
 
@@ -93,13 +88,13 @@ class FMGui:
                                         fg="#f1c40f", bg="#121212", font=("Segoe UI", 14, "bold"))
         self.lbl_presupuesto.pack(side="right")
 
-        # Tabla Clasificación
         cols = ("Pos", "Equipo", "PJ", "Pts", "DG")
         self.tree = ttk.Treeview(main, columns=cols, show="headings", height=8)
         config_cols = {"Pos": 50, "Equipo": 250, "PJ": 60, "Pts": 60, "DG": 60}
         for c in cols:
             self.tree.heading(c, text=c)
-            self.tree.column(c, width=config_cols[c], anchor="w" if c == "Equipo" else "center")
+            self.tree.column(c, width=config_cols[c], anchor="center")
+        self.tree.column("Equipo", anchor="w")
         
         self.tree.pack(fill="x", pady=10)
         self.tree.bind("<Double-1>", self.on_double_click)
@@ -122,7 +117,6 @@ class FMGui:
         for i, (nombre, s) in enumerate(tabla_ord, 1):
             dg = s["GF"] - s["GC"]
             self.tree.insert("", "end", iid=nombre, values=(i, nombre, s["PJ"], s["Pts"], dg))
-        # Actualizar visualmente el presupuesto
         self.lbl_presupuesto.config(text=f"Presupuesto: {self.liga.equipos[0].presupuesto} 💰")
 
     def jugar_jornada(self):
@@ -137,7 +131,6 @@ class FMGui:
                 simular_partido_mejorado(loc, vis)
                 self.liga.registrar_resultado(loc, vis)
                 
-                # Premios económicos (Ejemplo: 100 por ganar, 40 por empatar)
                 if loc.goles > vis.goles: loc.presupuesto += 100
                 elif vis.goles > loc.goles: vis.presupuesto += 100
                 else:
@@ -152,9 +145,7 @@ class FMGui:
                         p.entrenar()
                     equipo.actualizar_nivel_equipo()
 
-            # Refrescar mercado cada jornada
-            self.liga.mercado_libres = crear_jugadores_libres(8)
-            
+            self.liga.mercado_libres = crear_jugadores_libres(10)
             self.liga.jornada_actual += 1
             self.lbl_jornada.config(text=f"Jornada {self.liga.jornada_actual + 1}")
             self.actualizar_tabla()
@@ -164,30 +155,32 @@ class FMGui:
     def abrir_mercado(self):
         v_mercado = tk.Toplevel(self.root)
         v_mercado.title("MERCADO DE FICHAJES")
-        v_mercado.geometry("700x550")
+        v_mercado.geometry("750x550")
         v_mercado.configure(bg="#1a252f")
 
-        user_team = self.liga.equipos[0] # El jugador controla al primer equipo
+        user_team = self.liga.equipos[0]
         
         tk.Label(v_mercado, text=f"Presupuesto Disponible: {user_team.presupuesto} 💰", 
                  fg="#f1c40f", bg="#1a252f", font=("Segoe UI", 12, "bold")).pack(pady=15)
 
-        cols = ("ID", "Nombre", "Pos", "CA", "Precio")
+        # AHORA CON PA
+        cols = ("ID", "Nombre", "Pos", "CA", "PA", "Precio")
         t_m = ttk.Treeview(v_mercado, columns=cols, show="headings")
+        config_m = {"ID": 40, "Nombre": 180, "Pos": 80, "CA": 60, "PA": 60, "Precio": 100}
+        
         for c in cols:
             t_m.heading(c, text=c)
-            t_m.column(c, width=100, anchor="center")
+            t_m.column(c, width=config_m[c], anchor="center")
         
         for i, j in enumerate(self.liga.mercado_libres):
-            precio = j.ca * 5 # Lógica de precio simple
-            t_m.insert("", "end", iid=i, values=(i, j.nombre, j.posicion, j.ca, precio))
+            precio = j.ca * 5
+            t_m.insert("", "end", iid=i, values=(i, j.nombre, j.posicion, j.ca, j.pa, precio))
         
         t_m.pack(expand=True, fill="both", padx=20)
 
         def confirmar_fichaje():
             sel = t_m.focus()
             if not sel: return
-            
             idx = int(sel)
             jugador = self.liga.mercado_libres[idx]
             coste = jugador.ca * 5
@@ -212,22 +205,25 @@ class FMGui:
         
         v = tk.Toplevel(self.root)
         v.title(f"Plantilla - {equipo.nombre}")
-        v.geometry("750x500")
+        v.geometry("850x500")
         v.configure(bg="#1a252f")
 
-        cols = ("Nombre", "Pos", "Edad", "CA", "Estado")
+        # AHORA CON PA TAMBIÉN EN PLANTILLA
+        cols = ("Nombre", "Pos", "Edad", "CA", "PA", "Estado")
         t = ttk.Treeview(v, columns=cols, show="headings")
+        config_p = {"Nombre": 180, "Pos": 80, "Edad": 60, "CA": 60, "PA": 60, "Estado": 140}
+        
         for c in cols:
             t.heading(c, text=c)
-            t.column(c, width=120, anchor="center")
-        t.column("Nombre", width=180, anchor="w")
+            t.column(c, width=config_p[c], anchor="center")
+        t.column("Nombre", anchor="w")
         
         for j in equipo.plantilla:
             estado_txt = "Disponible"
             if j.lesionado: estado_txt = f"🚑 {j.dias_lesion}j"
             elif j.sancionado: estado_txt = "🟥 Sancionado"
             
-            t.insert("", "end", values=(j.nombre, j.posicion, j.edad, j.ca, estado_txt))
+            t.insert("", "end", values=(j.nombre, j.posicion, j.edad, j.ca, j.pa, estado_txt))
         
         t.pack(expand=True, fill="both", padx=15, pady=15)
 
