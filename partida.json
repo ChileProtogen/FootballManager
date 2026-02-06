@@ -1,0 +1,132 @@
+{
+    "nombre_liga": "La Liga",
+    "jornada_actual": 1,
+    "tabla": {
+        "Real Madrid": {
+            "PJ": 1,
+            "G": 0,
+            "E": 1,
+            "P": 0,
+            "GF": 0,
+            "GC": 0,
+            "Pts": 1
+        },
+        "Barcelona": {
+            "PJ": 1,
+            "G": 1,
+            "E": 0,
+            "P": 0,
+            "GF": 1,
+            "GC": 0,
+            "Pts": 3
+        },
+        "Atl\u00e9tico": {
+            "PJ": 1,
+            "G": 1,
+            "E": 0,
+            "P": 0,
+            "GF": 1,
+            "GC": 0,
+            "Pts": 3
+        },
+        "Sevilla": {
+            "PJ": 1,
+            "G": 0,
+            "E": 0,
+            "P": 1,
+            "GF": 0,
+            "GC": 1,
+            "Pts": 0
+        },
+        "Betis": {
+            "PJ": 1,
+            "G": 0,
+            "E": 0,
+            "P": 1,
+            "GF": 0,
+            "GC": 1,
+            "Pts": 0
+        },
+        "Valencia": {
+            "PJ": 1,
+            "G": 0,
+            "E": 1,
+            "P": 0,
+            "GF": 0,
+            "GC": 0,
+            "Pts": 1
+        }
+    },
+    "calendario": [
+        [
+            [
+                "Real Madrid",
+                "Valencia"
+            ],
+            [
+                "Barcelona",
+                "Betis"
+            ],
+            [
+                "Atl\u00e9tico",
+                "Sevilla"
+            ]
+        ],
+        [
+            [
+                "Real Madrid",
+                "Betis"
+            ],
+            [
+                "Valencia",
+                "Sevilla"
+            ],
+            [
+                "Barcelona",
+                "Atl\u00e9tico"
+            ]
+        ],
+        [
+            [
+                "Real Madrid",
+                "Sevilla"
+            ],
+            [
+                "Betis",
+                "Atl\u00e9tico"
+            ],
+            [
+                "Valencia",
+                "Barcelona"
+            ]
+        ],
+        [
+            [
+                "Real Madrid",
+                "Atl\u00e9tico"
+            ],
+            [
+                "Sevilla",
+                "Barcelona"
+            ],
+            [
+                "Betis",
+                "Valencia"
+            ]
+        ],
+        [
+            [
+                "Real Madrid",
+                "Barcelona"
+            ],
+            [
+                "Atl\u00e9tico",
+                "Valencia"
+            ],
+            [
+                "Sevilla",
+                "Betis"
+            ]
+        ]
+    ]
+}
