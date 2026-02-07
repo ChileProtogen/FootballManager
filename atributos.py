@@ -1,14 +1,11 @@
 import random
 from potencial import Jugador as JugadorCompleto
-# Listas para la generación de identidad
-NOMBRES = ["Lucas", "Mateo", "Julián", "Enzo", "Bautista", "Diego", "Lionel", "Lautaro", "Facundo", "Tomás"]
-APELLIDOS = ["García", "Rodríguez", "Martínez", "Álvarez", "Fernández", "Romero", "Simeone", "Paredes", "Scaloni", "Gago"]
 
 # Definición de la importancia de atributos por posición
 CONFIG_POSICIONES = {
-    "Delantero": {
-        "clave": ["Remate", "Anticipación", "Velocidad"],
-        "secundarios": ["Regate", "Control", "Determinación"]
+    "Portero": {
+        "clave": ["Reflejos", "Agilidad", "Posicionamiento"],
+        "secundarios": ["Pase", "Anticipación", "Fuerza"]
     },
     "Defensa": {
         "clave": ["Entrada", "Posicionamiento", "Fuerza"],
@@ -17,38 +14,26 @@ CONFIG_POSICIONES = {
     "Mediocentro": {
         "clave": ["Pase", "Visión", "Control"],
         "secundarios": ["Resistencia", "Determinación", "Anticipación"]
+    },
+    "Delantero": {
+        "clave": ["Remate", "Anticipación", "Velocidad"],
+        "secundarios": ["Regate", "Control", "Determinación"]
     }
 }
 
 TODOS_LOS_ATRIBUTOS = [
     "Remate", "Pase", "Regate", "Entrada", "Control", 
     "Visión", "Posicionamiento", "Anticipación", 
-    "Determinación", "Velocidad", "Resistencia", "Fuerza"
+    "Determinación", "Velocidad", "Resistencia", "Fuerza",
+    "Reflejos", "Agilidad"
 ]
 
-# Añade esto a atributos.py
 class Entrenador:
     def __init__(self, nombre, estilo, nivel, salario):
         self.nombre = nombre
-        self.estilo = estilo  # "Ofensivo" (+goles, +riesgo), "Defensivo" (-goles encajados), "Equilibrado"
-        self.nivel = nivel    # De 1.0 a 1.5 (Multiplicador de CA)
+        self.estilo = estilo  # "Ofensivo", "Defensivo", "Equilibrado"
+        self.nivel = nivel    # De 1.0 a 1.5 (Multiplicador de rendimiento)
         self.salario = salario
-
-def generar_candidatos_dt(cantidad=3):
-    nombres_dt = ["Ancelotti", "Guardiola", "Mourinho", "Klopp", "Simeone", "Zidane"]
-    estilos = ["Ofensivo", "Defensivo", "Equilibrado"]
-    candidatos = []
-    for _ in range(cantidad):
-        nombre = f"Sr. {random.choice(nombres_dt)} {generar_nombre_aleatorio().split()[-1]}"
-        estilo = random.choice(estilos)
-        nivel = round(random.uniform(1.0, 1.4), 2)
-        salario = int(nivel * 200) # El salario depende de su nivel
-        candidatos.append(Entrenador(nombre, estilo, nivel, salario))
-    return candidatos
-
-def generar_nombre_aleatorio():
-    """Genera una combinación aleatoria de nombre y apellido"""
-    return f"{random.choice(NOMBRES)} {random.choice(APELLIDOS)}"
 
 def generar_stats_jugador(posicion):
     """
@@ -56,7 +41,7 @@ def generar_stats_jugador(posicion):
     respetando pesos clave y secundarios.
     """
     if posicion not in CONFIG_POSICIONES:
-        return None
+        return {attr: random.randint(5, 12) for attr in TODOS_LOS_ATRIBUTOS}
 
     stats = {}
     config = CONFIG_POSICIONES[posicion]
@@ -69,44 +54,29 @@ def generar_stats_jugador(posicion):
             # Atributos importantes: nivel medio-alto (10-16)
             stats[attr] = random.randint(10, 16)
         else:
-            # Atributos no específicos: rango bajo-medio (5-14)
-            stats[attr] = random.randint(5, 14)
+            # Atributos no específicos: rango bajo-medio (5-12)
+            stats[attr] = random.randint(5, 12)
             
     return stats
 
-def generar_jugador_completo(posicion, nombre=None):
+def aplicar_atributos_a_jugador(nombre, posicion, edad):
     """
-    Orquestador que devuelve el paquete completo de datos para 
-    instanciar luego la clase Jugador en potencial.py
+    Función puente para crear la instancia de JugadorCompleto 
+    con stats generados dinámicamente.
     """
-    if nombre is None:
-        nombre = generar_nombre_aleatorio()
-    
     stats = generar_stats_jugador(posicion)
-    
-    if stats is None:
-        return "Posición no válida"
+    return JugadorCompleto(nombre, posicion, edad, stats)
 
-    return {
-        "nombre": nombre,
-        "posicion": posicion,
-        "atributos": stats
-    }
-
-def crear_jugadores_libres(cantidad=10):
-    """Genera una lista de objetos Jugador que no pertenecen a ningún equipo."""
-    libres = []
-    posiciones = ["Delantero", "Defensa", "Mediocentro"]
+def generar_candidatos_dt(cantidad=3):
+    """Genera entrenadores con nombres base para que el usuario elija."""
+    nombres_base = ["Ancelotti", "Guardiola", "Mourinho", "Klopp", "Simeone", "Zidane"]
+    estilos = ["Ofensivo", "Defensivo", "Equilibrado"]
+    candidatos = []
     
     for _ in range(cantidad):
-        nombre = generar_nombre_aleatorio()
-        pos = random.choice(posiciones)
-        edad = random.randint(18, 33)
-        stats = generar_stats_jugador(pos)
-        
-        # Creamos la instancia del jugador
-        nuevo_jugador = JugadorCompleto(nombre, pos, edad, stats)
-        libres.append(nuevo_jugador)
-        
-    return libres   
-
+        nombre = f"Sr. {random.choice(nombres_base)}"
+        estilo = random.choice(estilos)
+        nivel = round(random.uniform(1.0, 1.4), 2)
+        salario = int(nivel * 200) 
+        candidatos.append(Entrenador(nombre, estilo, nivel, salario))
+    return candidatos

@@ -1,290 +1,253 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import sqlite3
 import random
-from liga import Liga
-from match_engine import simular_partido_mejorado
-from potencial import Jugador as JugadorCompleto
-from atributos import (generar_nombre_aleatorio, generar_stats_jugador, 
-                        crear_jugadores_libres, generar_candidatos_dt)
 
-# --- Lógica de Equipo ---
+# --- IMPORTACIONES DE TUS MÓDULOS ---
+# Asegúrate de que estos nombres coincidan con tus archivos
+from match_engine import simular_partido_pro 
+from calendario import generar_calendario_espejo
+
 class EquipoReal:
-    def __init__(self, nombre):
+    def __init__(self, id_db, nombre, presupuesto=2000, id_liga=None):
+        self.id_db = id_db
         self.nombre = nombre
+        self.presupuesto = presupuesto
+        self.id_liga = id_liga  # <--- Añadimos esto
         self.plantilla = []
-        self.entrenador = None  # Rol central del DoF
-        self.presupuesto = 2000 
-        self.goles = 0
+        self.entrenador = None
         self.nivel_medio = 0
-
-    def generar_plantilla_inicial(self, cantidad=15):
-        posiciones = ["Delantero", "Defensa", "Mediocentro"]
-        for _ in range(cantidad):
-            nombre = generar_nombre_aleatorio()
-            pos = random.choice(posiciones)
-            edad = random.randint(17, 34)
-            stats = generar_stats_jugador(pos)
-            nuevo_jugador = JugadorCompleto(nombre, pos, edad, stats)
-            self.plantilla.append(nuevo_jugador)
+        
+    def cargar_plantilla_desde_db(self):
+        """Carga jugadores y sus atributos técnicos de la DB"""
+        conn = sqlite3.connect("futbol_manager.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT j.nombre, j.posicion, j.ca, j.pa, j.edad, 
+                   a.remate, a.pase, a.vision, a.reflejos, a.velocidad
+            FROM jugadores j
+            JOIN atributos a ON j.id = a.jugador_id
+            WHERE j.equipo_id = ?
+        """, (self.id_db,))
+        
+        filas = cursor.fetchall()
+        self.plantilla = []
+        for f in filas:
+            # Creamos un objeto simple de jugador con acceso a sus stats
+            jugador = type('Jugador', (), {
+                'nombre': f[0], 'posicion': f[1], 'ca': f[2], 'pa': f[3], 'edad': f[4],
+                'stats': {"Remate": f[5], "Pase": f[6], "Visión": f[7], "Reflejos": f[8], "Velocidad": f[9]},
+                'amarillas_acumuladas': 0, 'lesionado': False, 'sancionado': False
+            })
+            self.plantilla.append(jugador)
+        conn.close()
         self.actualizar_nivel_equipo()
 
     def actualizar_nivel_equipo(self):
+        """Calcula el nivel basado en el CA y el bonus del DT"""
         disponibles = [j.ca for j in self.plantilla if not j.lesionado and not j.sancionado]
         if disponibles:
-            base_ca = (sum(disponibles) / len(disponibles)) / 2
-            # El DT aplica su multiplicador. Si no hay, penaliza un 30% (caos táctico)
-            multiplicador = self.entrenador.nivel if self.entrenador else 0.7
-            self.nivel_medio = base_ca * multiplicador
+            ca_promedio = sum(disponibles) / len(disponibles)
+            # El DT aporta un multiplicador (ej: Nivel 1.2 es un 20% extra)
+            multiplicador = self.entrenador.nivel if self.entrenador else 0.8
+            self.nivel_medio = ca_promedio * multiplicador
         else:
-            self.nivel_medio = 5
+            self.nivel_medio = 10
 
-# --- Interfaz Principal ---
 class FMGui:
-    def __init__(self, root):
+    def __init__(self, root, mi_equipo_nombre):
         self.root = root
-        self.root.title("PYTHON FOOTBALL MANAGER - DIRECTOR MODE")
-        self.root.geometry("1150x750")
-        self.root.configure(bg="#121212")
-
+        self.mi_equipo_nombre = mi_equipo_nombre
+        self.anio_actual = 2025
+        self.temporada_str = "25/26"
+        self.jornada_actual = 0
+        
         self.preparar_juego()
-        self.setup_styles()
         self.setup_ui()
 
     def preparar_juego(self):
-        nombres = ["Real Madrid", "Barcelona", "Atlético", "Sevilla", "Betis", "Valencia"]
-        equipos = [EquipoReal(n) for n in nombres]
-        for e in equipos: e.generar_plantilla_inicial()
+        conn = sqlite3.connect("futbol_manager.db")
+        cursor = conn.cursor()
+
+        # 1. Cargar Equipos (incluyendo liga_id)
+        cursor.execute("SELECT id, nombre, presupuesto, liga_id FROM equipos") # Añadimos liga_id
+        filas_equipos = cursor.fetchall()
         
-        self.liga = Liga("La Liga", equipos)
-        self.liga.generar_fixture()
-        self.liga.mercado_libres = crear_jugadores_libres(10)
+        self.equipos = []
+        for id_db, nombre, presupuesto, l_id in filas_equipos:
+            eq = EquipoReal(id_db, nombre, presupuesto, id_liga=l_id) # Pasamos l_id
+            eq.cargar_plantilla_desde_db()
+            self.equipos.append(eq)
 
-    def setup_styles(self):
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Treeview", background="#1e1e1e", foreground="white", 
-                        fieldbackground="#1e1e1e", borderwidth=0, font=("Segoe UI", 10))
-        style.configure("Treeview.Heading", background="#2c3e50", foreground="white", 
-                        font=("Segoe UI", 10, "bold"), padding=5)
-        style.map("Treeview", background=[('selected', '#3498db')])
+        # 2. Generar/Verificar Calendario
+        generar_calendario_espejo(self.anio_actual)
+        
+        # 3. IDENTIFICAR AL USUARIO PRIMERO
+        try:
+            self.user_team = next(e for e in self.equipos if e.nombre == self.mi_equipo_nombre)
+        except StopIteration:
+            print(f"⚠️ No se encontró '{self.mi_equipo_nombre}', usando primero de la lista.")
+            self.user_team = self.equipos[0]
 
+        # 4. AHORA SÍ: Guardar el ID de la liga del usuario
+        self.mi_liga_id = self.user_team.id_liga 
+
+        # 5. Sincronizar jornada
+        cursor.execute("""
+            SELECT MAX(jornada) FROM partidos 
+            WHERE jugado = 1 AND temporada = ? AND liga_id = ?
+        """, (self.temporada_str, self.mi_liga_id))
+        
+        res = cursor.fetchone()[0]
+        self.jornada_actual = res if res else 0
+        conn.close()
+        
     def setup_ui(self):
-        sidebar = tk.Frame(self.root, width=220, bg="#1a252f")
-        sidebar.pack(side="left", fill="y")
-
-        tk.Label(sidebar, text="DOF MANAGER", fg="#3498db", bg="#1a252f", font=("Impact", 26)).pack(pady=25)
+        self.root.state('zoomed')
+        self.root.configure(bg="#121212")
         
-        self.crear_boton(sidebar, "Siguiente Jornada", self.jugar_jornada)
-        self.crear_boton(sidebar, "Mercado Fichajes", self.abrir_mercado)
-        self.crear_boton(sidebar, "Gestionar DT", self.abrir_gestion_dt)
-        self.crear_boton(sidebar, "Ver Clasificación", self.actualizar_tabla)
-        self.crear_boton(sidebar, "Guardar Partida", self.liga.guardar_partida)
+        # --- Sidebar ---
+        sidebar = tk.Frame(self.root, width=250, bg="#1a252f")
+        sidebar.pack(side="left", fill="y")
+        
+        tk.Label(sidebar, text="DOF MANAGER", fg="#3498db", bg="#1a252f", font=("Impact", 28)).pack(pady=30)
+        
+        btn_params = {"bg": "#34495e", "fg": "white", "font": ("Segoe UI", 11, "bold"), "height": 2, "cursor": "hand2", "relief": "flat"}
+        tk.Button(sidebar, text="Siguiente Jornada", command=self.jugar_jornada, **btn_params).pack(fill="x", padx=20, pady=10)
+        tk.Button(sidebar, text="Ver Clasificación", command=self.actualizar_tabla, **btn_params).pack(fill="x", padx=20, pady=10)
+        tk.Button(sidebar, text="Mi Plantilla", command=self.ver_plantilla_usuario, **btn_params).pack(fill="x", padx=20, pady=10)
 
-        main = tk.Frame(self.root, bg="#121212")
-        main.pack(side="right", expand=True, fill="both", padx=25, pady=20)
+        # --- Main Area ---
+        self.main = tk.Frame(self.root, bg="#121212")
+        self.main.pack(side="right", fill="both", expand=True, padx=20, pady=20)
 
-        header_frame = tk.Frame(main, bg="#121212")
-        header_frame.pack(fill="x")
-
-        self.lbl_jornada = tk.Label(header_frame, text=f"Jornada {self.liga.jornada_actual + 1}", 
-                                    fg="white", bg="#121212", font=("Segoe UI", 20, "bold"))
+        # Header con Presupuesto y Jornada
+        header = tk.Frame(self.main, bg="#121212")
+        header.pack(fill="x")
+        
+        self.lbl_jornada = tk.Label(header, text=f"TEMPORADA {self.temporada_str} - JORNADA {self.jornada_actual + 1}", 
+                                    fg="white", bg="#121212", font=("Segoe UI", 18, "bold"))
         self.lbl_jornada.pack(side="left")
-
-        self.lbl_presupuesto = tk.Label(header_frame, text=f"Presupuesto: {self.liga.equipos[0].presupuesto} 💰", 
+        
+        self.lbl_presupuesto = tk.Label(header, text=f"Presupuesto: {self.user_team.presupuesto}M 💰", 
                                         fg="#f1c40f", bg="#121212", font=("Segoe UI", 14, "bold"))
         self.lbl_presupuesto.pack(side="right")
 
-        cols = ("Pos", "Equipo", "PJ", "Pts", "DG", "Entrenador")
-        self.tree = ttk.Treeview(main, columns=cols, show="headings", height=8)
-        config_cols = {"Pos": 50, "Equipo": 200, "PJ": 50, "Pts": 50, "DG": 50, "Entrenador": 180}
-        for c in cols:
+        # Tabla de Clasificación
+        cols = ("Pos", "Equipo", "PJ", "G", "E", "P", "Pts", "DG")
+        self.tree = ttk.Treeview(self.main, columns=cols, show="headings", height=15)
+        for c in cols: 
             self.tree.heading(c, text=c)
-            self.tree.column(c, width=config_cols[c], anchor="center")
-        self.tree.column("Equipo", anchor="w")
+            self.tree.column(c, width=80, anchor="center")
+        self.tree.column("Equipo", width=250, anchor="w")
+        self.tree.pack(fill="x", pady=20)
+
+        # Consola de Resultados
+        self.txt_console = tk.Text(self.main, height=12, bg="#000", fg="#2ecc71", font=("Consolas", 10), padx=10, pady=10)
+        self.txt_console.pack(fill="both", expand=True)
         
-        self.tree.pack(fill="x", pady=10)
-        self.tree.bind("<Double-1>", self.on_double_click)
-
-        tk.Label(main, text="PANEL DE NOTICIAS Y FINANZAS", fg="#bdc3c7", bg="#121212", font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        self.txt_resultados = tk.Text(main, height=12, bg="#0d0d0d", fg="#2ecc71", 
-                                      font=("Consolas", 10), relief="flat", padx=10, pady=10)
-        self.txt_resultados.pack(fill="x", pady=5)
-
         self.actualizar_tabla()
-
-    def crear_boton(self, parent, texto, comando):
-        tk.Button(parent, text=texto, command=comando, bg="#34495e", fg="white", 
-                  activebackground="#2980b9", relief="flat", font=("Segoe UI", 10), 
-                  height=2, cursor="hand2").pack(fill="x", padx=20, pady=8)
-
-    def actualizar_tabla(self):
-        for item in self.tree.get_children(): self.tree.delete(item)
-        tabla_ord = sorted(self.liga.tabla.items(), key=lambda x: (x[1]['Pts'], x[1]['GF']-x[1]['GC']), reverse=True)
-        for i, (nombre, s) in enumerate(tabla_ord, 1):
-            equipo_obj = next(e for e in self.liga.equipos if e.nombre == nombre)
-            dt_nombre = equipo_obj.entrenador.nombre if equipo_obj.entrenador else "SIN DT"
-            dg = s["GF"] - s["GC"]
-            self.tree.insert("", "end", iid=nombre, values=(i, nombre, s["PJ"], s["Pts"], dg, dt_nombre))
-        self.lbl_presupuesto.config(text=f"Presupuesto: {self.liga.equipos[0].presupuesto} 💰")
-
-    def abrir_gestion_dt(self):
-        v_dt = tk.Toplevel(self.root)
-        v_dt.title("GESTIÓN DEL ENTRENADOR")
-        v_dt.geometry("650x500")
-        v_dt.configure(bg="#1a252f")
-
-        user_team = self.liga.equipos[0]
-
-        # DT ACTUAL
-        frame_actual = tk.LabelFrame(v_dt, text="Cuerpo Técnico Actual", fg="white", bg="#1a252f", font=("Arial", 10, "bold"))
-        frame_actual.pack(fill="x", padx=20, pady=15)
-
-        if user_team.entrenador:
-            dt = user_team.entrenador
-            info = f"Nombre: {dt.nombre}\nEstilo: {dt.estilo}\nNivel: {dt.nivel}\nSalario: {dt.salario}💰/jornada"
-            tk.Label(frame_actual, text=info, fg="#ecf0f1", bg="#1a252f", justify="left").pack(side="left", padx=10, pady=10)
-            
-            tk.Button(frame_actual, text="DESPEDIR DT", bg="#e74c3c", fg="white", 
-                      command=lambda: self.despedir_dt(user_team, v_dt)).pack(side="right", padx=10)
-        else:
-            tk.Label(frame_actual, text="VACANTE: El equipo rinde al 70%", fg="#f1c40f", bg="#1a252f").pack(pady=20)
-
-        # CANDIDATOS
-        tk.Label(v_dt, text="Candidatos en el Mercado", fg="#3498db", bg="#1a252f", font=("Arial", 12, "bold")).pack(pady=10)
-        
-        candidatos = generar_candidatos_dt(3)
-        for c in candidatos:
-            f = tk.Frame(v_dt, bg="#2c3e50", pady=10)
-            f.pack(fill="x", padx=20, pady=5)
-            
-            lbl_text = f"{c.nombre} | {c.estilo} | Nivel: {c.nivel}\nSalario: {c.salario}💰"
-            tk.Label(f, text=lbl_text, fg="white", bg="#2c3e50", justify="left").pack(side="left", padx=10)
-            
-            tk.Button(f, text="CONTRATAR", bg="#27ae60", fg="white", 
-                      command=lambda cand=c: self.contratar_dt(user_team, cand, v_dt)).pack(side="right", padx=10)
-
-    def contratar_dt(self, equipo, dt, ventana):
-        if equipo.entrenador:
-            messagebox.showerror("Error", "Debes despedir al DT actual primero.")
-            return
-        equipo.entrenador = dt
-        equipo.actualizar_nivel_equipo()
-        messagebox.showinfo("Éxito", f"{dt.nombre} toma el mando del {equipo.nombre}.")
-        ventana.destroy()
-        self.actualizar_tabla()
-
-    def despedir_dt(self, equipo, ventana):
-        if messagebox.askyesno("Confirmar", f"¿Seguro que quieres echar a {equipo.entrenador.nombre}?"):
-            equipo.entrenador = None
-            equipo.actualizar_nivel_equipo()
-            ventana.destroy()
-            self.actualizar_tabla()
 
     def jugar_jornada(self):
-        if self.liga.jornada_actual < len(self.liga.calendario):
-            self.txt_resultados.delete("1.0", tk.END)
-            partidos = self.liga.calendario[self.liga.jornada_actual]
+        conn = sqlite3.connect("futbol_manager.db")
+        cursor = conn.cursor()
+        # En FMGui.jugar_jornada
+        cursor.execute("""
+            SELECT equipo_local_id, equipo_visitante_id FROM partidos 
+            WHERE jornada = ? AND temporada = ? AND jugado = 0 AND liga_id = ?
+        """, (self.jornada_actual + 1, self.temporada_str, self.mi_liga_id))
+        
+        # Traer partidos de la jornada desde la DB
+        cursor.execute("""
+            SELECT equipo_local_id, equipo_visitante_id FROM partidos 
+            WHERE jornada = ? AND temporada = ? AND jugado = 0
+        """, (self.jornada_actual + 1, self.temporada_str))
+        partidos = cursor.fetchall()
+
+        if not partidos:
+            messagebox.showinfo("Fin", "No hay más partidos en esta temporada.")
+            return
+
+        self.txt_console.delete("1.0", tk.END)
+        self.txt_console.insert(tk.END, f">>> SIMULANDO JORNADA {self.jornada_actual + 1}...\n\n")
+
+        for id_loc, id_vis in partidos:
+            loc = next(e for e in self.equipos if e.id_db == id_loc)
+            vis = next(e for e in self.equipos if e.id_db == id_vis)
             
-            for loc_n, vis_n in partidos:
-                loc = next(e for e in self.liga.equipos if e.nombre == loc_n)
-                vis = next(e for e in self.liga.equipos if e.nombre == vis_n)
-                
-                simular_partido_mejorado(loc, vis)
-                self.liga.registrar_resultado(loc, vis)
-                
-                # Ingresos por resultados
-                if loc.goles > vis.goles: loc.presupuesto += 120
-                elif vis.goles > loc.goles: vis.presupuesto += 120
-                else: 
-                    loc.presupuesto += 50
-                    vis.presupuesto += 50
+            # Simulamos con el motor PRO
+            cronica = simular_partido_pro(loc, vis)
+            
+            # Guardamos resultado en DB
+            cursor.execute("""
+                UPDATE partidos SET goles_local = ?, goles_visitante = ?, jugado = 1 
+                WHERE equipo_local_id = ? AND equipo_visitante_id = ? AND temporada = ?
+            """, (loc.goles, vis.goles, id_loc, id_vis, self.temporada_str))
+            
+            self.txt_console.insert(tk.END, f"• {loc.nombre} {loc.goles} - {vis.goles} {vis.nombre}\n")
+            self.root.update() # Para que se vea en tiempo real
 
-                self.txt_resultados.insert(tk.END, f" ✔ {loc.nombre.ljust(15)} {loc.goles} - {vis.goles} {vis_n}\n")
-                
-                for equipo in [loc, vis]:
-                    # Gasto de salario DT
-                    if equipo.entrenador:
-                        equipo.presupuesto -= equipo.entrenador.salario
-                    
-                    for p in equipo.plantilla:
-                        p.recuperar()
-                        p.entrenar()
-                    equipo.actualizar_nivel_equipo()
-
-            self.liga.mercado_libres = crear_jugadores_libres(10)
-            self.liga.jornada_actual += 1
-            self.lbl_jornada.config(text=f"Jornada {self.liga.jornada_actual + 1}")
-            self.actualizar_tabla()
-        else:
-            messagebox.showinfo("Liga Finalizada", "Fin de la temporada.")
-
-    def abrir_mercado(self):
-        v_mercado = tk.Toplevel(self.root)
-        v_mercado.title("MERCADO DE FICHAJES")
-        v_mercado.geometry("750x550")
-        v_mercado.configure(bg="#1a252f")
-
-        user_team = self.liga.equipos[0]
-        tk.Label(v_mercado, text=f"Presupuesto: {user_team.presupuesto} 💰", 
-                 fg="#f1c40f", bg="#1a252f", font=("Segoe UI", 12, "bold")).pack(pady=15)
-
-        cols = ("ID", "Nombre", "Pos", "CA", "PA", "Precio")
-        t_m = ttk.Treeview(v_mercado, columns=cols, show="headings")
-        config_m = {"ID": 40, "Nombre": 180, "Pos": 80, "CA": 60, "PA": 60, "Precio": 100}
-        for c in cols:
-            t_m.heading(c, text=c)
-            t_m.column(c, width=config_m[c], anchor="center")
+        conn.commit()
+        conn.close()
         
-        for i, j in enumerate(self.liga.mercado_libres):
-            precio = j.ca * 5
-            t_m.insert("", "end", iid=i, values=(i, j.nombre, j.posicion, j.ca, j.pa, precio))
-        t_m.pack(expand=True, fill="both", padx=20)
+        self.jornada_actual += 1
+        self.lbl_jornada.config(text=f"TEMPORADA {self.temporada_str} - JORNADA {self.jornada_actual + 1}")
+        self.actualizar_tabla()
 
-        def confirmar_fichaje():
-            sel = t_m.focus()
-            if not sel: return
-            idx = int(sel)
-            jugador = self.liga.mercado_libres[idx]
-            coste = jugador.ca * 5
-            if user_team.presupuesto >= coste:
-                if messagebox.askyesno("Fichaje", f"¿Fichar a {jugador.nombre}?"):
-                    user_team.presupuesto -= coste
-                    user_team.plantilla.append(self.liga.mercado_libres.pop(idx))
-                    user_team.actualizar_nivel_equipo()
-                    self.actualizar_tabla()
-                    v_mercado.destroy()
-            else:
-                messagebox.showwarning("Aviso", "Sin fondos suficientes.")
-
-        tk.Button(v_mercado, text="FICHAR JUGADOR", command=confirmar_fichaje, 
-                  bg="#27ae60", fg="white", font=("Segoe UI", 10, "bold"), height=2).pack(pady=15)
-
-    def on_double_click(self, event=None):
-        item_id = self.tree.focus()
-        if not item_id: return
-        equipo = next(e for e in self.liga.equipos if e.nombre == item_id)
+    def actualizar_tabla(self):
+        """Calcula la tabla directamente de los resultados en la DB"""
+        for item in self.tree.get_children(): self.tree.delete(item)
         
+        conn = sqlite3.connect("futbol_manager.db")
+        cursor = conn.cursor()
+
+        # Consulta SQL maestra para clasificación
+        cursor.execute("""
+            SELECT e.nombre,
+                COUNT(p.id) as PJ,
+                SUM(CASE WHEN (e.id = p.equipo_local_id AND p.goles_local > p.goles_visitante) OR 
+                             (e.id = p.equipo_visitante_id AND p.goles_visitante > p.goles_local) THEN 1 ELSE 0 END) as G,
+                SUM(CASE WHEN p.goles_local = p.goles_visitante THEN 1 ELSE 0 END) as E,
+                SUM(CASE WHEN (e.id = p.equipo_local_id AND p.goles_local < p.goles_visitante) OR 
+                             (e.id = p.equipo_visitante_id AND p.goles_visitante < p.goles_local) THEN 1 ELSE 0 END) as P,
+                SUM(CASE WHEN e.id = p.equipo_local_id THEN p.goles_local ELSE p.goles_visitante END) -
+                SUM(CASE WHEN e.id = p.equipo_local_id THEN p.goles_visitante ELSE p.goles_local END) as DG,
+                SUM(CASE WHEN (e.id = p.equipo_local_id AND p.goles_local > p.goles_visitante) OR 
+                             (e.id = p.equipo_visitante_id AND p.goles_visitante > p.goles_local) THEN 3
+                         WHEN p.goles_local = p.goles_visitante THEN 1 ELSE 0 END) as Pts
+            FROM equipos e
+            JOIN partidos p ON (e.id = p.equipo_local_id OR e.id = p.equipo_visitante_id)
+            WHERE p.jugado = 1 AND p.temporada = ?
+            GROUP BY e.id
+            ORDER BY Pts DESC, DG DESC
+        """, (self.temporada_str,))
+
+        for i, row in enumerate(cursor.fetchall(), 1):
+            self.tree.insert("", "end", values=(i, row[0], row[1], row[2], row[3], row[4], row[6], row[5]))
+        
+        conn.close()
+
+    def ver_plantilla_usuario(self):
+        """Muestra los atributos detallados de tus jugadores"""
         v = tk.Toplevel(self.root)
-        v.title(f"Plantilla - {equipo.nombre}")
-        v.geometry("850x500")
+        v.title(f"Plantilla: {self.user_team.nombre}")
+        v.geometry("700x400")
         v.configure(bg="#1a252f")
-
-        cols = ("Nombre", "Pos", "Edad", "CA", "PA", "Estado")
-        t = ttk.Treeview(v, columns=cols, show="headings")
-        config_p = {"Nombre": 180, "Pos": 80, "Edad": 60, "CA": 60, "PA": 60, "Estado": 140}
-        for c in cols:
-            t.heading(c, text=c)
-            t.column(c, width=config_p[c], anchor="center")
-        t.column("Nombre", anchor="w")
         
-        for j in equipo.plantilla:
-            estado = "Disponible"
-            if j.lesionado: estado = f"🚑 {j.dias_lesion}j"
-            elif j.sancionado: estado = "🟥 Sancionado"
-            t.insert("", "end", values=(j.nombre, j.posicion, j.edad, j.ca, j.pa, estado))
-        t.pack(expand=True, fill="both", padx=15, pady=15)
+        cols = ("Nombre", "Pos", "Edad", "CA", "Remate", "Pase", "Reflejos")
+        t = ttk.Treeview(v, columns=cols, show="headings")
+        for c in cols: 
+            t.heading(c, text=c)
+            t.column(c, width=90, anchor="center")
+        
+        for j in self.user_team.plantilla:
+            t.insert("", "end", values=(j.nombre, j.posicion, j.edad, j.ca, 
+                                        j.stats["Remate"], j.stats["Pase"], j.stats["Reflejos"]))
+        t.pack(fill="both", expand=True, padx=10, pady=10)
 
 if __name__ == "__main__":
+    # Aquí deberías llamar a tu selector de equipo primero
+    # Por ahora forzamos uno para probar
     root = tk.Tk()
-    app = FMGui(root)
+    app = FMGui(root, "FC Barcelona") # Cambia por el nombre que elijas
     root.mainloop()

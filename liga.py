@@ -35,29 +35,6 @@ class Liga:
             self.tabla[visitante.nombre]["Pts"] += 1
 
 
-    def generar_fixture(self):
-        """Genera un calendario de todos contra todos (Round Robin)"""
-        nombres_equipos = [e.nombre for e in self.equipos]
-        if len(nombres_equipos) % 2 != 0:
-            nombres_equipos.append("DESCANSO")
-
-        n = len(nombres_equipos)
-        fixture = []
-        copia_equipos = list(nombres_equipos)
-
-        for i in range(n - 1):
-            jornada = []
-            for j in range(n // 2):
-                local = copia_equipos[j]
-                visitante = copia_equipos[n - 1 - j]
-                if local != "DESCANSO" and visitante != "DESCANSO":
-                    jornada.append((local, visitante))
-            fixture.append(jornada)
-            # Rotar equipos manteniendo el primero fijo
-            copia_equipos.insert(1, copia_equipos.pop())
-        
-        self.calendario = fixture
-
     def mostrar_tabla(self):
         # Ordenar por Puntos, luego por Diferencia de Goles (GF - GC)
         tabla_ordenada = sorted(
